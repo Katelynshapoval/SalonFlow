@@ -4,7 +4,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-
+from telegram.ext import CallbackQueryHandler
 from app.controllers.bot_controller import BotController
 
 
@@ -29,6 +29,7 @@ class BotService:
         app.add_handler(CommandHandler("start", self.controller.start))
         app.add_handler(CommandHandler("help", self.controller.help))
         app.add_handler(CommandHandler("servicios", self.controller.servicios))
+        app.add_handler(CallbackQueryHandler(self.controller.handle_button))
 
         # Próximos pasos
         # app.add_handler(CommandHandler("book", self.controller.book))
