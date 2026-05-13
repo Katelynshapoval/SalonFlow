@@ -2,9 +2,10 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    filters
+    CallbackQueryHandler,
+    filters,
 )
-from telegram.ext import CallbackQueryHandler
+
 from app.controllers.bot_controller import BotController
 
 
@@ -16,33 +17,24 @@ class BotService:
 
     def build(self):
         app = ApplicationBuilder().token(self.token).build()
-
-        self._registrar_comandos(app)
-        self._registrar_handlers_generales(app)
-
+        self._register_commands(app)
+        self._register_general_handlers(app)
         return app
 
-    # =========================
-    # COMANDOS
-    # =========================
-    def _registrar_comandos(self, app):
+    def _register_commands(self, app) -> None:
         app.add_handler(CommandHandler("start", self.controller.start))
         app.add_handler(CommandHandler("help", self.controller.help))
         app.add_handler(CommandHandler("servicios", self.controller.servicios))
+        app.add_handler(CommandHandler("book", self.controller.book))
+        app.add_handler(CommandHandler("mis_citas", self.controller.mis_citas))
+        app.add_handler(CommandHandler("cancel", self.controller.cancel))
+        app.add_handler(CommandHandler("contacto_humano", self.controller.contacto_humano))
         app.add_handler(CallbackQueryHandler(self.controller.handle_button))
 
-        # Próximos pasos
-        # app.add_handler(CommandHandler("book", self.controller.book))
-        # app.add_handler(CommandHandler("cancel", self.controller.cancel))
-
-    # MENSAJES GENERALES
-    def _registrar_handlers_generales(self, app):
-        # Mensajes normales (registro)
+    def _register_general_handlers(self, app) -> None:
         app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.controller.handle_message)
         )
-
-        # Comandos desconocidos
         app.add_handler(
             MessageHandler(filters.COMMAND, self.controller.unknown)
         )

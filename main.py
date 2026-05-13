@@ -5,8 +5,7 @@ from app.services.bot_service import BotService
 def main():
     bot_service = BotService(settings.TELEGRAM_TOKEN)
     app = bot_service.build()
-
-    print("🤖 Bot is running...")
+    print("🤖 SalonFlow bot iniciado...")
     app.run_polling()
 
 

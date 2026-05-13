@@ -1,93 +1,74 @@
-import requests
-
-from config.db import Database
+import httpx
+from config.settings import settings
+from app.dao.faq_dao import FAQDAO
+from app.dao.servicio_dao import ServicioDAO
+from app.dao.empleado_dao import EmpleadoDAO
+from app.dao.disponibilidad_dao import DisponibilidadDAO
 
 
 class OllamaService:
-
-    OLLAMA_URL = "http://localhost:11434/api/generate"
-    MODEL = "minimax-m2.5:cloud"
-
-    @staticmethod
-    def _get_db_context():
-
-        conn = Database.get_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        # FAQ
-        cursor.execute("SELECT pregunta, respuesta FROM faq")
-        faqs = cursor.fetchall()
-
-        faq_text = ""
-        for f in faqs:
-            faq_text += f"Pregunta: {f['pregunta']}\nRespuesta: {f['respuesta']}\n\n"
-
-        # Servicios
-        cursor.execute("SELECT nombre, duracion_minutos, precio FROM servicios")
-        servicios = cursor.fetchall()
-
-        servicios_text = ""
-        for s in servicios:
-            servicios_text += (
-                f"{s['nombre']} - {s['precio']}€ ({s['duracion_minutos']} min)\n"
-            )
-
-        # Empleados
-        cursor.execute("SELECT nombre, especialidad FROM empleados")
-        empleados = cursor.fetchall()
-
-        empleados_text = ""
-        for e in empleados:
-            empleados_text += f"{e['nombre']} - {e['especialidad']}\n"
-
-        cursor.close()
-        conn.close()
-
-        return faq_text, servicios_text, empleados_text
+    """
+    Wraps the Ollama local LLM endpoint.
+    Context is injected read-only from the DB via DAOs.
+    The AI is never allowed to write to the DB.
+    """
 
     @staticmethod
-    def generar_respuesta(mensaje: str) -> str:
+    def _build_system_prompt() -> str:
+        faq_text = FAQDAO.obtener_todos_texto()
+        servicios_text = ServicioDAO.obtener_todos_texto()
+        empleados_text = EmpleadoDAO.obtener_todos_texto()
+        disponibilidad_text = DisponibilidadDAO.obtener_proximos_slots_texto()
 
-        faq_text, servicios_text, empleados_text = OllamaService._get_db_context()
+        return (
+            "Eres el asistente virtual de SalonFlow, un centro de estética ubicado en Zaragoza.\n"
+            "Tu misión es ayudar a los clientes de forma amable, clara y profesional.\n\n"
+            "INFORMACIÓN DEL NEGOCIO (usa SÓLO esta información, no inventes datos):\n\n"
+            f"== PREGUNTAS FRECUENTES ==\n{faq_text}\n\n"
+            f"== SERVICIOS DISPONIBLES ==\n{servicios_text}\n\n"
+            f"== EQUIPO ==\n{empleados_text}\n\n"
+            f"== PRÓXIMA DISPONIBILIDAD (referencia) ==\n{disponibilidad_text}\n\n"
+            "REGLAS ESTRICTAS:\n"
+            "- Responde siempre en español.\n"
+            "- Sé breve y directo (máximo 3-4 frases).\n"
+            "- Usa SÓLO la información anterior; si no sabes algo, dilo honestamente.\n"
+            "- NUNCA modifiques datos ni hagas reservas; para eso el cliente usa los comandos del bot.\n"
+            "- Si el cliente pregunta por reservas, citas o cancelaciones, indícale que use "
+            "/book, /mis_citas o /cancel según el caso.\n"
+            "- Si no puedes responder con certeza, sugiere que contacte con el equipo "
+            "usando /contacto_humano o llamando al 976 123 456.\n"
+        )
 
-        prompt = f"""
-Eres un asistente de un centro de estética llamado SalonFlow.
+    @staticmethod
+    async def generar_respuesta(mensaje: str) -> str:
+        system_prompt = OllamaService._build_system_prompt()
 
-Tu trabajo es ayudar a clientes respondiendo preguntas de forma clara, breve y profesional.
-
-INFORMACIÓN DEL NEGOCIO:
-
-FAQ:
-{faq_text}
-
-SERVICIOS:
-{servicios_text}
-
-EMPLEADOS:
-{empleados_text}
-
-REGLAS:
-- Usa SOLO la información proporcionada
-- No inventes datos
-- Si no sabes algo, di que el cliente contacte con el centro
-- Sé breve y claro
-
-Pregunta del cliente:
-{mensaje}
-"""
+        payload = {
+            "model": settings.OLLAMA_MODEL,
+            "system": system_prompt,
+            "prompt": mensaje,
+            "stream": False,
+        }
 
         try:
-            response = requests.post(
-                OllamaService.OLLAMA_URL,
-                json={
-                    "model": OllamaService.MODEL,
-                    "prompt": prompt,
-                    "stream": False
-                }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(settings.OLLAMA_URL, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                respuesta = data.get("response", "").strip()
+                if not respuesta:
+                    return (
+                        "🤔 No he podido procesar tu pregunta ahora mismo.\n"
+                        "Escribe /contacto_humano si necesitas ayuda urgente."
+                    )
+                return respuesta
+        except httpx.ConnectError:
+            return (
+                "⚠️ El asistente no está disponible en este momento.\n"
+                "Puedes llamarnos al 976 123 456 o usar /contacto_humano."
             )
-
-            data = response.json()
-            return data.get("response", "No he podido responder en este momento.")
-
         except Exception:
-            return "⚠️ Error al conectar con el asistente."
+            return (
+                "⚠️ Ha ocurrido un error inesperado con el asistente.\n"
+                "Usa /contacto_humano para hablar con una persona."
+            )

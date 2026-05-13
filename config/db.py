@@ -7,8 +7,10 @@ class Database:
     @staticmethod
     def get_connection():
         return mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="root",
-            database="salonflow"
+            host=settings.DB_HOST,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            database=settings.DB_NAME,
+            charset="utf8mb4",
+            use_unicode=True,
         )
