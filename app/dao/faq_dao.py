@@ -15,7 +15,7 @@ class FAQDAO:
 
     @staticmethod
     def obtener_todos_texto() -> str:
-        # Returns formatted FAQ for AI context injection.
+        """Returns formatted FAQ for AI context injection."""
         faqs = FAQDAO.obtener_todos()
         return "\n".join(
             f"P: {f['pregunta']}\nR: {f['respuesta']}"

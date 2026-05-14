@@ -26,7 +26,7 @@ class ServicioDAO:
 
     @staticmethod
     def obtener_todos_texto() -> str:
-        # Returns a text summary for AI context injection.
+        """Returns a text summary for AI context injection."""
         servicios = ServicioDAO.obtener_servicios()
         return "\n".join(
             f"- {s.nombre}: {s.precio}€, {s.duracion_minutos} min. {s.descripcion}"

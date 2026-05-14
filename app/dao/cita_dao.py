@@ -4,7 +4,7 @@ from app.models.cita import Cita
 
 
 def _td_to_str(td) -> str:
-    # Convert MySQL TIME (timedelta) or time object to HH:MM string.
+    """Convert MySQL TIME (timedelta) or time object to HH:MM string."""
     if isinstance(td, timedelta):
         total = int(td.total_seconds())
         h, rem = divmod(total, 3600)
@@ -17,7 +17,7 @@ class CitaDAO:
 
     @staticmethod
     def obtener_citas_futuras(id_usuario: int) -> list[Cita]:
-        # Returns all confirmed/pending future appointments for a user.
+        """Returns all confirmed/pending future appointments for a user."""
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
@@ -65,7 +65,7 @@ class CitaDAO:
         fecha: str,
         hora: str,
     ) -> int | None:
-        # Inserts a new cita. Returns the new id_cita, or None on failure.
+        """Inserts a new cita. Returns the new id_cita, or None on failure."""
         conn = Database.get_connection()
         cursor = conn.cursor()
         try:
@@ -87,7 +87,7 @@ class CitaDAO:
 
     @staticmethod
     def cancelar_cita(id_cita: int, id_usuario: int) -> bool:
-        # Sets cita status to 'cancelada'. Returns True on success.
+        """Sets cita status to 'cancelada'. Returns True on success."""
         conn = Database.get_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -105,7 +105,7 @@ class CitaDAO:
 
     @staticmethod
     def hay_conflicto(id_empleado: int, fecha: str, hora: str) -> bool:
-        # Returns True if the employee already has a confirmed booking at that slot.
+        """Returns True if the employee already has a confirmed booking at that slot."""
         conn = Database.get_connection()
         cursor = conn.cursor()
         cursor.execute(

@@ -13,7 +13,9 @@ class BotController:
         self.user_ctrl = UserController()
         self.booking_ctrl = BookingController()
 
+    # ------------------------------------------------------------------ #
     # Commands
+    # ------------------------------------------------------------------ #
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.user_ctrl.start(update, context)
 
@@ -35,7 +37,9 @@ class BotController:
     async def contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self.user_ctrl.contacto_humano(update, context)
 
+    # ------------------------------------------------------------------ #
     # Inline keyboard callbacks
+    # ------------------------------------------------------------------ #
     async def handle_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         await query.answer()
@@ -72,16 +76,18 @@ class BotController:
         elif data == "ch":
             await self.user_ctrl.contacto_humano(update, context)
 
+    # ------------------------------------------------------------------ #
     # Free-text messages
+    # ------------------------------------------------------------------ #
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         flow = context.user_data.get("flow")
 
-        # Active registration flow
+        # ── Active registration flow ──────────────────────────────────
         if flow == "registro":
             await self.user_ctrl.handle_registro(update, context)
             return
 
-        # Active booking flow (text fallback)
+        # ── Active booking flow (text fallback) ───────────────────────
         if flow == "booking":
             await update.message.reply_text(
                 "📅 Usa los botones para continuar con tu reserva.\n"
@@ -89,7 +95,7 @@ class BotController:
             )
             return
 
-        # Active cancel flow (text fallback)
+        # ── Active cancel flow (text fallback) ────────────────────────
         if flow == "cancel":
             await update.message.reply_text(
                 "🗑 Usa los botones para seleccionar la cita a cancelar.\n"
@@ -97,7 +103,7 @@ class BotController:
             )
             return
 
-        # Unregistered user
+        # ── Unregistered user ─────────────────────────────────────────
         telegram_id = update.effective_user.id
         if not UsuarioDAO.usuario_registrado(telegram_id):
             await update.message.reply_text(
@@ -106,12 +112,14 @@ class BotController:
             )
             return
 
-        # AI assistant for everything else
+        # ── AI assistant for everything else ─────────────────────────
         await update.message.chat.send_action("typing")
         respuesta = await OllamaService.generar_respuesta(update.message.text)
         await update.message.reply_text(respuesta)
 
+    # ------------------------------------------------------------------ #
     # Unknown commands
+    # ------------------------------------------------------------------ #
     async def unknown(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
             "❓ Comando no reconocido.\n"

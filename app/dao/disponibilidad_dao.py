@@ -3,7 +3,7 @@ from config.db import Database
 
 
 def _td_to_time(td) -> tuple[int, int]:
-    # Convert mysql TIME (returned as timedelta) to (hour, minute).
+    """Convert mysql TIME (returned as timedelta) to (hour, minute)."""
     if isinstance(td, timedelta):
         total = int(td.total_seconds())
         h, rem = divmod(total, 3600)
@@ -98,7 +98,7 @@ class DisponibilidadDAO:
 
     @staticmethod
     def obtener_proximos_slots_texto(limit: int = 8) -> str:
-        # Returns a text summary for AI context injection.
+        """Returns a text summary for AI context injection."""
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(

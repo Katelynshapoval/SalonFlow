@@ -4,11 +4,14 @@ from telegram.ext import ContextTypes
 from app.dao.usuario_dao import UsuarioDAO
 from app.dao.solicitud_contacto_dao import SolicitudContactoDAO
 from app.handlers.registro_handler import RegistroHandler
+from app.services.alert_service import enviar_alerta_contacto
 
 
 class UserController:
 
+    # ------------------------------------------------------------------ #
     # /start
+    # ------------------------------------------------------------------ #
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
         username = update.effective_user.username or ""
@@ -18,7 +21,7 @@ class UserController:
 
         usuario = UsuarioDAO.obtener_por_telegram_id(telegram_id)
 
-        # New user
+        # ── New user ──────────────────────────────────────────────────
         if not usuario:
             UsuarioDAO.crear_usuario(telegram_id, username)
             keyboard = [[InlineKeyboardButton("📝 Registrarme", callback_data="registro")]]
@@ -36,7 +39,7 @@ class UserController:
             )
             return
 
-        # Incomplete registration
+        # ── Incomplete registration ───────────────────────────────────
         if not usuario["registrado"]:
             keyboard = [[InlineKeyboardButton("📝 Completar registro", callback_data="registro")]]
             await update.message.reply_text(
@@ -48,7 +51,7 @@ class UserController:
             )
             return
 
-        # Registered user
+        # ── Registered user ───────────────────────────────────────────
         keyboard = [
             [
                 InlineKeyboardButton("📅 Reservar cita", callback_data="cmd_book"),
@@ -65,7 +68,9 @@ class UserController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # /help
+    # ------------------------------------------------------------------ #
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = [[InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")]]
         await update.message.reply_text(
@@ -74,9 +79,9 @@ class UserController:
             "*/start* — Inicio y menú principal\n"
             "*/servicios* — Ver catálogo de servicios y precios\n"
             "*/book* — Reservar una nueva cita\n"
-            "*/mis_citas* — Ver tus próximas citas\n"
+            "*/mis\\_citas* — Ver tus próximas citas\n"
             "*/cancel* — Cancelar una cita existente\n"
-            "*/contacto_humano* — Hablar con el equipo del salón\n"
+            "*/contacto\\_humano* — Hablar con el equipo del salón\n"
             "*/help* — Mostrar esta ayuda\n\n"
             "💬 También puedes escribirme cualquier pregunta y te responderé "
             "con ayuda de nuestro asistente inteligente.\n\n"
@@ -87,7 +92,9 @@ class UserController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Registration flow
+    # ------------------------------------------------------------------ #
     async def start_registro(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Triggered when user taps 'Registrarme' button."""
         context.user_data["flow"] = "registro"
@@ -102,7 +109,9 @@ class UserController:
     async def handle_registro(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await RegistroHandler.procesar(update, context)
 
+    # ------------------------------------------------------------------ #
     # /contacto_humano
+    # ------------------------------------------------------------------ #
     async def contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
         id_usuario = UsuarioDAO.obtener_id_usuario(telegram_id)
@@ -113,7 +122,19 @@ class UserController:
             )
             return
 
-        SolicitudContactoDAO.crear_solicitud(id_usuario)
+        mensaje = "Solicitud de atención humana desde el bot"
+        db_ok = SolicitudContactoDAO.crear_solicitud(id_usuario, mensaje)
+
+        # ── Fire Telegram group alert regardless of DB result ─────────
+        # The alert is best-effort: a failure is logged but never shown
+        # to the user and never rolls back the DB insert.
+        if db_ok:
+            await enviar_alerta_contacto(
+                context.bot,
+                username=update.effective_user.username,
+                first_name=update.effective_user.first_name,
+                mensaje=mensaje,
+            )
 
         await update.effective_message.reply_text(
             "🧑‍💼 *Solicitud registrada*\n\n"

@@ -16,7 +16,7 @@ class EmpleadoDAO:
 
     @staticmethod
     def obtener_todos_texto() -> str:
-        # Returns a text summary for AI context injection.
+        """Returns a text summary for AI context injection."""
         empleados = EmpleadoDAO.obtener_empleados()
         return "\n".join(
             f"- {e.nombre} (especialidad: {e.especialidad})"

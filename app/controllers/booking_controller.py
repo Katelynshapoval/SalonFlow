@@ -15,14 +15,14 @@ _MESES_ES = [
 
 
 def _fmt_fecha(fecha_str: str) -> str:
-    # Formats a 'YYYY-MM-DD' string to human-readable Spanish.
+    """Formats a 'YYYY-MM-DD' string to human-readable Spanish."""
     d = date.fromisoformat(str(fecha_str))
     dia_semana = _DIAS_ES[d.weekday()]
     return f"{dia_semana} {d.day} {_MESES_ES[d.month]}"
 
 
 def _require_registered(func):
-    # Reject command if user is not fully registered.
+    """Decorator: reject command if user is not fully registered."""
     async def wrapper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_id = update.effective_user.id
         if not UsuarioDAO.usuario_registrado(telegram_id):
@@ -37,7 +37,9 @@ def _require_registered(func):
 
 class BookingController:
 
+    # ------------------------------------------------------------------ #
     # /servicios
+    # ------------------------------------------------------------------ #
     async def servicios(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         servicios = ServicioDAO.obtener_servicios()
         if not servicios:
@@ -54,7 +56,9 @@ class BookingController:
         texto += "👉 Reserva con /book"
         await update.message.reply_text(texto, parse_mode="Markdown")
 
+    # ------------------------------------------------------------------ #
     # /book — step 1: choose service
+    # ------------------------------------------------------------------ #
     @_require_registered
     async def book(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.user_data["flow"] = "booking"
@@ -80,7 +84,9 @@ class BookingController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Callback: service selected → step 2: choose slot
+    # ------------------------------------------------------------------ #
     async def seleccionar_servicio(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         id_servicio = int(query.data.split(":")[1])
@@ -130,7 +136,9 @@ class BookingController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Callback: slot selected → step 3: confirm
+    # ------------------------------------------------------------------ #
     async def seleccionar_slot(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         _, id_empleado_str, fecha, hora = query.data.split(":", 3)
@@ -162,7 +170,9 @@ class BookingController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Callback: confirm booking
+    # ------------------------------------------------------------------ #
     async def confirmar_booking(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         telegram_id = update.effective_user.id
@@ -208,7 +218,9 @@ class BookingController:
                 "Por favor llámanos al 976 123 456."
             )
 
+    # ------------------------------------------------------------------ #
     # Callback: cancel booking flow
+    # ------------------------------------------------------------------ #
     async def cancelar_booking_flow(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -218,7 +230,9 @@ class BookingController:
             "❌ Reserva cancelada. Usa /book cuando quieras intentarlo de nuevo."
         )
 
+    # ------------------------------------------------------------------ #
     # /mis_citas
+    # ------------------------------------------------------------------ #
     @_require_registered
     async def mis_citas(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
@@ -245,7 +259,9 @@ class BookingController:
         texto += "Para cancelar alguna, usa /cancel."
         await update.message.reply_text(texto, parse_mode="Markdown")
 
+    # ------------------------------------------------------------------ #
     # /cancel — step 1: list citas
+    # ------------------------------------------------------------------ #
     @_require_registered
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
@@ -275,7 +291,9 @@ class BookingController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Callback: cita chosen → confirm cancellation
+    # ------------------------------------------------------------------ #
     async def seleccionar_cancelacion(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -295,7 +313,9 @@ class BookingController:
             parse_mode="Markdown",
         )
 
+    # ------------------------------------------------------------------ #
     # Callback: confirm cancellation
+    # ------------------------------------------------------------------ #
     async def confirmar_cancelacion(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
