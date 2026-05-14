@@ -32,6 +32,18 @@ class BotController:
         await self.booking_ctrl.mis_citas(update, context)
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        flow = context.user_data.get("flow")
+
+        # ── Cancel human contact flow ─────────────────────────────────
+        if flow == "contacto_humano":
+            context.user_data.clear()
+            await update.effective_message.reply_text(
+                "✅ Solicitud cancelada.\n\n"
+                "No se ha enviado ningún mensaje al equipo."
+            )
+            return
+
+        # Keep old booking cancellation logic
         await self.booking_ctrl.cancel(update, context)
 
     async def contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,6 +93,11 @@ class BotController:
     # ------------------------------------------------------------------ #
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         flow = context.user_data.get("flow")
+
+        # ── Active human contact flow ─────────────────────────────────
+        if flow == "contacto_humano":
+            await self.user_ctrl.handle_contacto_humano(update, context)
+            return
 
         # ── Active registration flow ──────────────────────────────────
         if flow == "registro":

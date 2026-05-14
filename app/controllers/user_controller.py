@@ -110,7 +110,7 @@ class UserController:
         await RegistroHandler.procesar(update, context)
 
     # ------------------------------------------------------------------ #
-    # /contacto_humano
+    # /contacto_humano or "Hablar con una persona" button
     # ------------------------------------------------------------------ #
     async def contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
@@ -122,12 +122,44 @@ class UserController:
             )
             return
 
-        mensaje = "Solicitud de atención humana desde el bot"
+        context.user_data["flow"] = "contacto_humano"
+        context.user_data["id_usuario_contacto"] = id_usuario
+
+        await update.effective_message.reply_text(
+            "🧑‍💼 *Hablar con una persona*\n\n"
+            "Cuéntanos brevemente qué problema tienes o en qué podemos ayudarte.\n\n"
+            "Escribe tu mensaje aquí abajo.\n"
+            "Si quieres cancelar, usa /cancel.",
+            parse_mode="Markdown",
+        )
+
+    # ------------------------------------------------------------------ #
+    # Human contact message flow
+    # ------------------------------------------------------------------ #
+    async def handle_contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.user_data.get("flow") != "contacto_humano":
+            return
+
+        mensaje = update.message.text.strip()
+
+        if not mensaje:
+            await update.message.reply_text(
+                "Por favor, escribe un mensaje explicando qué necesitas.\n\n"
+                "También puedes usar /cancel para cancelar."
+            )
+            return
+
+        id_usuario = context.user_data.get("id_usuario_contacto")
+
+        if not id_usuario:
+            context.user_data.clear()
+            await update.message.reply_text(
+                "⚠️ Ha ocurrido un problema con la solicitud. Por favor, inténtalo de nuevo con /contacto_humano."
+            )
+            return
+
         db_ok = SolicitudContactoDAO.crear_solicitud(id_usuario, mensaje)
 
-        # ── Fire Telegram group alert regardless of DB result ─────────
-        # The alert is best-effort: a failure is logged but never shown
-        # to the user and never rolls back the DB insert.
         if db_ok:
             await enviar_alerta_contacto(
                 context.bot,
@@ -136,14 +168,20 @@ class UserController:
                 mensaje=mensaje,
             )
 
-        await update.effective_message.reply_text(
-            "🧑‍💼 *Solicitud registrada*\n\n"
-            "Hemos anotado que deseas hablar con una persona de nuestro equipo.\n"
-            "Te contactaremos lo antes posible.\n\n"
-            "Si necesitas una respuesta urgente:\n"
-            "📞 976 123 456\n"
-            "📍 Paseo de Calanda 69, Zaragoza\n"
-            "🕐 Lunes a viernes, 9:00 – 20:00\n\n"
-            "¡Gracias por confiar en SalonFlow! 💅",
-            parse_mode="Markdown",
-        )
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                "🧑‍💼 *Solicitud enviada*\n\n"
+                "Hemos enviado tu mensaje al equipo del salón.\n"
+                "Alguien se pondrá en contacto contigo lo antes posible.\n\n"
+                "📞 976 123 456\n"
+                "📍 Paseo de Calanda 69, Zaragoza\n"
+                "🕐 Lunes a viernes, 9:00 – 20:00\n\n"
+                "¡Gracias por confiar en SalonFlow! 💅",
+                parse_mode="Markdown",
+            )
+        else:
+            await update.message.reply_text(
+                "⚠️ No hemos podido registrar tu solicitud ahora mismo.\n"
+                "Por favor, inténtalo de nuevo más tarde o llama al 976 123 456."
+            )
