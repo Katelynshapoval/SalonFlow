@@ -24,8 +24,12 @@ class UserController:
         # ── New user ──────────────────────────────────────────────────
         if not usuario:
             UsuarioDAO.crear_usuario(telegram_id, username)
-            keyboard = [[InlineKeyboardButton("📝 Registrarme", callback_data="registro")]]
-            await update.message.reply_text(
+
+            keyboard = [
+                [InlineKeyboardButton("📝 Registrarme", callback_data="registro")]
+            ]
+
+            await update.effective_message.reply_text(
                 "👋 *¡Bienvenido a SalonFlow!*\n\n"
                 "💅 Somos tu centro de estética de confianza.\n"
                 "Desde aquí podrás:\n"
@@ -41,8 +45,11 @@ class UserController:
 
         # ── Incomplete registration ───────────────────────────────────
         if not usuario["registrado"]:
-            keyboard = [[InlineKeyboardButton("📝 Completar registro", callback_data="registro")]]
-            await update.message.reply_text(
+            keyboard = [
+                [InlineKeyboardButton("📝 Completar registro", callback_data="registro")]
+            ]
+
+            await update.effective_message.reply_text(
                 "📋 *Registro incompleto*\n\n"
                 "Todavía no hemos terminado tu registro. "
                 "Pulsa el botón para continuarlo:",
@@ -57,13 +64,20 @@ class UserController:
                 InlineKeyboardButton("📅 Reservar cita", callback_data="cmd_book"),
                 InlineKeyboardButton("📋 Mis citas", callback_data="cmd_mis_citas"),
             ],
-            [InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")],
+            [
+                InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")
+            ],
         ]
-        await update.message.reply_text(
+
+        await update.effective_message.reply_text(
             f"👋 *¡Hola, {usuario['nombre']}!*\n\n"
             "¿Qué quieres hacer hoy?\n\n"
-            "También puedes usar los comandos:\n"
-            "/servicios · /book · /mis\\_citas · /cancel · /help",
+            "📋 *Comandos útiles:*\n"
+            "*/servicios* — Ver servicios y precios\n"
+            "*/book* — Reservar una nueva cita\n"
+            "*/mis\\_citas* — Ver tus próximas citas\n"
+            "*/cancel* — Cancelar una cita o proceso activo\n"
+            "*/help* — Ver ayuda completa",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
@@ -72,8 +86,11 @@ class UserController:
     # /help
     # ------------------------------------------------------------------ #
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        keyboard = [[InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")]]
-        await update.message.reply_text(
+        keyboard = [
+            [InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")]
+        ]
+
+        await update.effective_message.reply_text(
             "📋 *Ayuda — SalonFlow*\n\n"
             "Aquí tienes todos los comandos disponibles:\n\n"
             "*/start* — Inicio y menú principal\n"
@@ -99,6 +116,7 @@ class UserController:
         """Triggered when user taps 'Registrarme' button."""
         context.user_data["flow"] = "registro"
         context.user_data["registro"] = "nombre"
+
         await update.effective_message.reply_text(
             "📝 *Registro de usuario*\n\n"
             "Sólo necesitamos tres datos para crear tu perfil.\n\n"
@@ -140,10 +158,17 @@ class UserController:
         if context.user_data.get("flow") != "contacto_humano":
             return
 
+        if not update.message or not update.message.text:
+            await update.effective_message.reply_text(
+                "Por favor, escribe un mensaje de texto explicando qué necesitas.\n\n"
+                "También puedes usar /cancel para cancelar."
+            )
+            return
+
         mensaje = update.message.text.strip()
 
         if not mensaje:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "Por favor, escribe un mensaje explicando qué necesitas.\n\n"
                 "También puedes usar /cancel para cancelar."
             )
@@ -153,8 +178,9 @@ class UserController:
 
         if not id_usuario:
             context.user_data.clear()
-            await update.message.reply_text(
-                "⚠️ Ha ocurrido un problema con la solicitud. Por favor, inténtalo de nuevo con /contacto_humano."
+            await update.effective_message.reply_text(
+                "⚠️ Ha ocurrido un problema con la solicitud. "
+                "Por favor, inténtalo de nuevo con /contacto_humano."
             )
             return
 
@@ -170,7 +196,7 @@ class UserController:
 
             context.user_data.clear()
 
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "🧑‍💼 *Solicitud enviada*\n\n"
                 "Hemos enviado tu mensaje al equipo del salón.\n"
                 "Alguien se pondrá en contacto contigo lo antes posible.\n\n"
@@ -181,7 +207,7 @@ class UserController:
                 parse_mode="Markdown",
             )
         else:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "⚠️ No hemos podido registrar tu solicitud ahora mismo.\n"
                 "Por favor, inténtalo de nuevo más tarde o llama al 976 123 456."
             )

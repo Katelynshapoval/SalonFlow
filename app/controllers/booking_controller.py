@@ -66,7 +66,7 @@ class BookingController:
 
         servicios = ServicioDAO.obtener_servicios()
         if not servicios:
-            await update.message.reply_text("❌ No hay servicios disponibles ahora mismo.")
+            await update.effective_message.reply_text("❌ No hay servicios disponibles ahora mismo.")
             return
 
         keyboard = [
@@ -78,7 +78,7 @@ class BookingController:
         ]
         keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
 
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "📅 *Nueva reserva*\n\nElige el servicio que deseas:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
@@ -240,7 +240,7 @@ class BookingController:
         citas = CitaDAO.obtener_citas_futuras(id_usuario)
 
         if not citas:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 "📋 No tienes citas próximas.\n\nReserva una con /book 😊"
             )
             return
@@ -257,7 +257,7 @@ class BookingController:
                 f"   Estado: ✅ Confirmada\n\n"
             )
         texto += "Para cancelar alguna, usa /cancel."
-        await update.message.reply_text(texto, parse_mode="Markdown")
+        await update.effective_message.reply_text(texto, parse_mode="Markdown")
 
     # ------------------------------------------------------------------ #
     # /cancel — step 1: list citas
