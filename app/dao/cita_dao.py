@@ -1,25 +1,27 @@
 from datetime import datetime, timedelta
-from config.db import Database
+
 from app.models.cita import Cita
+from config.db import Database
 
 
+# Convert a database time value into an hour and minute string
 def _td_to_str(td) -> str:
-    """Convert MySQL TIME (timedelta) or time object to HH:MM string."""
     if isinstance(td, timedelta):
         total = int(td.total_seconds())
         h, rem = divmod(total, 3600)
         m = rem // 60
         return f"{h:02d}:{m:02d}"
+
     return td.strftime("%H:%M")
 
 
 class CitaDAO:
-
+    # Get all future appointments for a user
     @staticmethod
     def obtener_citas_futuras(id_usuario: int) -> list[Cita]:
-        """Returns all confirmed/pending future appointments for a user."""
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
+
         cursor.execute(
             """
             SELECT c.id_cita, c.id_usuario, c.id_servicio, c.id_empleado,
@@ -36,11 +38,15 @@ class CitaDAO:
             """,
             (id_usuario,),
         )
+
         rows = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
         citas = []
+
+        # Convert each database row into a Cita model
         for row in rows:
             citas.append(
                 Cita(
@@ -55,8 +61,10 @@ class CitaDAO:
                     nombre_empleado=row["nombre_empleado"],
                 )
             )
+
         return citas
 
+    # Create a new appointment
     @staticmethod
     def crear_cita(
         id_usuario: int,
@@ -65,9 +73,9 @@ class CitaDAO:
         fecha: str,
         hora: str,
     ) -> int | None:
-        """Inserts a new cita. Returns the new id_cita, or None on failure."""
         conn = Database.get_connection()
         cursor = conn.cursor()
+
         try:
             cursor.execute(
                 """
@@ -76,20 +84,25 @@ class CitaDAO:
                 """,
                 (id_usuario, id_servicio, id_empleado, fecha, hora),
             )
+
             conn.commit()
+
             return cursor.lastrowid
+
         except Exception:
             conn.rollback()
             return None
+
         finally:
             cursor.close()
             conn.close()
 
+    # Mark an appointment as cancelled
     @staticmethod
     def cancelar_cita(id_cita: int, id_usuario: int) -> bool:
-        """Sets cita status to 'cancelada'. Returns True on success."""
         conn = Database.get_connection()
         cursor = conn.cursor()
+
         cursor.execute(
             """
             UPDATE citas SET estado = 'cancelada'
@@ -97,17 +110,22 @@ class CitaDAO:
             """,
             (id_cita, id_usuario),
         )
+
         conn.commit()
+
         affected = cursor.rowcount
+
         cursor.close()
         conn.close()
+
         return affected > 0
 
+    # Check whether an employee already has a confirmed appointment in the same slot
     @staticmethod
     def hay_conflicto(id_empleado: int, fecha: str, hora: str) -> bool:
-        """Returns True if the employee already has a confirmed booking at that slot."""
         conn = Database.get_connection()
         cursor = conn.cursor()
+
         cursor.execute(
             """
             SELECT COUNT(*) FROM citas
@@ -115,7 +133,10 @@ class CitaDAO:
             """,
             (id_empleado, fecha, hora),
         )
+
         count = cursor.fetchone()[0]
+
         cursor.close()
         conn.close()
+
         return count > 0

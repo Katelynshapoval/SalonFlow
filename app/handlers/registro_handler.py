@@ -1,4 +1,5 @@
 import re
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -6,46 +7,47 @@ from app.dao.usuario_dao import UsuarioDAO
 
 
 class RegistroHandler:
-    """
-    Handles the sequential registration flow stored in context.user_data.
-    Flow state lives under context.user_data['registro']:
-        'nombre' → waiting for name
-        'telefono' → waiting for phone
-        'email' → waiting for email
-    """
-
     _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     _PHONE_RE = re.compile(r"^[6789]\d{8}$")
 
     @staticmethod
     async def procesar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        # Get the current user input and registration state.
         telegram_id = update.effective_user.id
         texto = update.message.text.strip()
         estado = context.user_data.get("registro")
 
+        # Process the name step.
         if estado == "nombre":
             if len(texto) < 2:
                 await update.message.reply_text("⚠️ El nombre es demasiado corto. Inténtalo de nuevo:")
                 return
+
             context.user_data["nombre"] = texto
             context.user_data["registro"] = "telefono"
+
             await update.message.reply_text(
                 "📞 Introduce tu número de teléfono móvil (9 dígitos):"
             )
             return
 
+        # Process the phone number step.
         if estado == "telefono":
             limpio = texto.replace(" ", "").replace("-", "")
+
             if not RegistroHandler._PHONE_RE.match(limpio):
                 await update.message.reply_text(
                     "⚠️ Formato incorrecto. Introduce un teléfono móvil español de 9 dígitos:"
                 )
                 return
+
             context.user_data["telefono"] = limpio
             context.user_data["registro"] = "email"
+
             await update.message.reply_text("📧 Introduce tu correo electrónico:")
             return
 
+        # Process the email step and complete the registration.
         if estado == "email":
             if not RegistroHandler._EMAIL_RE.match(texto):
                 await update.message.reply_text(

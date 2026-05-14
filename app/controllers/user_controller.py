@@ -1,33 +1,27 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from app.dao.usuario_dao import UsuarioDAO
 from app.dao.solicitud_contacto_dao import SolicitudContactoDAO
+from app.dao.usuario_dao import UsuarioDAO
 from app.handlers.registro_handler import RegistroHandler
 from app.services.alert_service import enviar_alerta_contacto
 
 
 class UserController:
-
-    # ------------------------------------------------------------------ #
-    # /start
-    # ------------------------------------------------------------------ #
+    # Show the main menu and guide the user based on registration status
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
         username = update.effective_user.username or ""
 
-        # Clear any active flow so /start always resets state
         context.user_data.clear()
 
         usuario = UsuarioDAO.obtener_por_telegram_id(telegram_id)
 
-        # ── New user ──────────────────────────────────────────────────
+        # Create a new user and ask them to register
         if not usuario:
             UsuarioDAO.crear_usuario(telegram_id, username)
 
-            keyboard = [
-                [InlineKeyboardButton("📝 Registrarme", callback_data="registro")]
-            ]
+            keyboard = [[InlineKeyboardButton("📝 Registrarme", callback_data="registro")]]
 
             await update.effective_message.reply_text(
                 "👋 *¡Bienvenido a SalonFlow!*\n\n"
@@ -43,7 +37,7 @@ class UserController:
             )
             return
 
-        # ── Incomplete registration ───────────────────────────────────
+        # Ask users with incomplete profiles to finish registration
         if not usuario["registrado"]:
             keyboard = [
                 [InlineKeyboardButton("📝 Completar registro", callback_data="registro")]
@@ -58,37 +52,31 @@ class UserController:
             )
             return
 
-        # ── Registered user ───────────────────────────────────────────
         keyboard = [
             [
                 InlineKeyboardButton("📅 Reservar cita", callback_data="cmd_book"),
                 InlineKeyboardButton("📋 Mis citas", callback_data="cmd_mis_citas"),
             ],
-            [
-                InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")
-            ],
+            [InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")],
         ]
 
+        # Show the main menu for registered users
         await update.effective_message.reply_text(
             f"👋 *¡Hola, {usuario['nombre']}!*\n\n"
             "¿Qué quieres hacer hoy?\n\n"
             "📋 *Comandos útiles:*\n"
             "*/servicios* — Ver servicios y precios\n"
             "*/book* — Reservar una nueva cita\n"
-            "*/mis\\_citas* — Ver tus próximas citas\n"
+            "*/mis_citas* — Ver tus próximas citas\n"
             "*/cancel* — Cancelar una cita o proceso activo\n"
             "*/help* — Ver ayuda completa",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # /help
-    # ------------------------------------------------------------------ #
+    # Show the help message and available commands
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        keyboard = [
-            [InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")]
-        ]
+        keyboard = [[InlineKeyboardButton("🧑‍💼 Hablar con una persona", callback_data="ch")]]
 
         await update.effective_message.reply_text(
             "📋 *Ayuda — SalonFlow*\n\n"
@@ -96,9 +84,9 @@ class UserController:
             "*/start* — Inicio y menú principal\n"
             "*/servicios* — Ver catálogo de servicios y precios\n"
             "*/book* — Reservar una nueva cita\n"
-            "*/mis\\_citas* — Ver tus próximas citas\n"
+            "*/mis_citas* — Ver tus próximas citas\n"
             "*/cancel* — Cancelar una cita existente\n"
-            "*/contacto\\_humano* — Hablar con el equipo del salón\n"
+            "*/contacto_humano* — Hablar con el equipo del salón\n"
             "*/help* — Mostrar esta ayuda\n\n"
             "💬 También puedes escribirme cualquier pregunta y te responderé "
             "con ayuda de nuestro asistente inteligente.\n\n"
@@ -109,11 +97,10 @@ class UserController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Registration flow
-    # ------------------------------------------------------------------ #
-    async def start_registro(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Triggered when user taps 'Registrarme' button."""
+    # Start the registration flow
+    async def start_registro(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         context.user_data["flow"] = "registro"
         context.user_data["registro"] = "nombre"
 
@@ -124,13 +111,16 @@ class UserController:
             parse_mode="Markdown",
         )
 
-    async def handle_registro(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Continue the registration flow
+    async def handle_registro(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         await RegistroHandler.procesar(update, context)
 
-    # ------------------------------------------------------------------ #
-    # /contacto_humano or "Hablar con una persona" button
-    # ------------------------------------------------------------------ #
-    async def contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Start the human contact flow
+    async def contacto_humano(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         telegram_id = update.effective_user.id
         id_usuario = UsuarioDAO.obtener_id_usuario(telegram_id)
 
@@ -151,10 +141,10 @@ class UserController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Human contact message flow
-    # ------------------------------------------------------------------ #
-    async def handle_contacto_humano(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Save the human contact request and notify the team
+    async def handle_contacto_humano(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         if context.user_data.get("flow") != "contacto_humano":
             return
 
@@ -178,6 +168,7 @@ class UserController:
 
         if not id_usuario:
             context.user_data.clear()
+
             await update.effective_message.reply_text(
                 "⚠️ Ha ocurrido un problema con la solicitud. "
                 "Por favor, inténtalo de nuevo con /contacto_humano."

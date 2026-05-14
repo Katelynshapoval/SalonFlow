@@ -1,27 +1,25 @@
 import re
+
 import httpx
 
-from config.settings import settings
+from app.dao.disponibilidad_dao import DisponibilidadDAO
+from app.dao.empleado_dao import EmpleadoDAO
 from app.dao.faq_dao import FAQDAO
 from app.dao.servicio_dao import ServicioDAO
-from app.dao.empleado_dao import EmpleadoDAO
-from app.dao.disponibilidad_dao import DisponibilidadDAO
+from config.settings import settings
 
 
 class OllamaService:
-    """
-    Wraps the Ollama local LLM endpoint.
-    Context is injected read-only from the DB via DAOs.
-    The AI is never allowed to write to the DB.
-    """
 
     @staticmethod
     def _build_system_prompt() -> str:
+        # Get read-only business context from the database.
         faq_text = FAQDAO.obtener_todos_texto()
         servicios_text = ServicioDAO.obtener_todos_texto()
         empleados_text = EmpleadoDAO.obtener_todos_texto()
         disponibilidad_text = DisponibilidadDAO.obtener_proximos_slots_texto()
 
+        # Build the system prompt used by the local language model.
         return (
             "Eres el asistente virtual de SalonFlow, un centro de estética ubicado en Zaragoza.\n"
             "Tu misión es ayudar a los clientes de forma amable, clara y profesional.\n\n"
@@ -45,39 +43,34 @@ class OllamaService:
 
     @staticmethod
     def _limpiar_formato(texto: str) -> str:
-        """
-        Removes common Markdown/formatting symbols that local LLMs may generate.
-        This keeps Telegram responses clean when sent as plain text.
-        """
+        # Return an empty response when there is no text to clean.
         if not texto:
             return ""
 
-        # Remove common Markdown markers
+        # Remove common Markdown markers.
         texto = texto.replace("**", "")
         texto = texto.replace("__", "")
         texto = texto.replace("`", "")
 
-        # Remove Markdown headings like "# Title", "## Title", etc.
+        # Remove Markdown headings.
         texto = re.sub(r"^\s*#{1,6}\s*", "", texto, flags=re.MULTILINE)
 
-        # Remove simple bullet formatting while keeping the text
+        # Remove simple bullet formatting while keeping the text.
         texto = re.sub(r"^\s*[-*]\s+", "", texto, flags=re.MULTILINE)
 
-        # Remove Markdown links but keep the visible text: [texto](url) -> texto
+        # Remove Markdown links while keeping the visible text.
         texto = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", texto)
 
-        # Clean excessive spaces
+        # Normalize excessive spaces and blank lines.
         texto = re.sub(r"[ \t]+", " ", texto)
-
-        # Clean too many blank lines
         texto = re.sub(r"\n{3,}", "\n\n", texto)
 
         return texto.strip()
 
     @staticmethod
     async def generar_respuesta(mensaje: str) -> str:
+        # Build the Ollama request payload.
         system_prompt = OllamaService._build_system_prompt()
-
         payload = {
             "model": settings.OLLAMA_MODEL,
             "system": system_prompt,
@@ -86,28 +79,32 @@ class OllamaService:
         }
 
         try:
+            # Send the message to the local Ollama endpoint.
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(settings.OLLAMA_URL, json=payload)
                 response.raise_for_status()
                 data = response.json()
 
-                respuesta = data.get("response", "").strip()
+            # Extract and clean the model response.
+            respuesta = data.get("response", "").strip()
 
-                if not respuesta:
-                    return (
-                        "🤔 No he podido procesar tu pregunta ahora mismo.\n"
-                        "Escribe /contacto_humano si necesitas ayuda urgente."
-                    )
+            if not respuesta:
+                return (
+                    "🤔 No he podido procesar tu pregunta ahora mismo.\n"
+                    "Escribe /contacto_humano si necesitas ayuda urgente."
+                )
 
-                return OllamaService._limpiar_formato(respuesta)
+            return OllamaService._limpiar_formato(respuesta)
 
         except httpx.ConnectError:
+            # Handle cases where the local assistant is unavailable.
             return (
                 "⚠️ El asistente no está disponible en este momento.\n"
                 "Puedes llamarnos al 976 123 456 o usar /contacto_humano."
             )
 
         except Exception:
+            # Return a safe fallback message for unexpected assistant errors.
             return (
                 "⚠️ Ha ocurrido un error inesperado con el asistente.\n"
                 "Usa /contacto_humano para hablar con una persona."

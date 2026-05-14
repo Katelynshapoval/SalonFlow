@@ -1,81 +1,100 @@
 from datetime import date
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from app.dao.servicio_dao import ServicioDAO
-from app.dao.disponibilidad_dao import DisponibilidadDAO
 from app.dao.cita_dao import CitaDAO
+from app.dao.disponibilidad_dao import DisponibilidadDAO
+from app.dao.servicio_dao import ServicioDAO
 from app.dao.usuario_dao import UsuarioDAO
+
 
 _DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 _MESES_ES = [
-    "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    "",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
 ]
 
 
+# Format an iso date into a readable spanish date
 def _fmt_fecha(fecha_str: str) -> str:
-    """Formats a 'YYYY-MM-DD' string to human-readable Spanish."""
     d = date.fromisoformat(str(fecha_str))
     dia_semana = _DIAS_ES[d.weekday()]
     return f"{dia_semana} {d.day} {_MESES_ES[d.month]}"
 
 
+# Check that the user is registered before running protected commands
 def _require_registered(func):
-    """Decorator: reject command if user is not fully registered."""
     async def wrapper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_id = update.effective_user.id
+
         if not UsuarioDAO.usuario_registrado(telegram_id):
             await update.effective_message.reply_text(
                 "⚠️ Necesitas registrarte antes de usar este comando.\n"
                 "Escribe /start para comenzar."
             )
             return
+
         return await func(self, update, context)
+
     return wrapper
 
 
 class BookingController:
-
-    # ------------------------------------------------------------------ #
-    # /servicios
-    # ------------------------------------------------------------------ #
+    # Show the available services
     async def servicios(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         servicios = ServicioDAO.obtener_servicios()
+
         if not servicios:
             await update.message.reply_text("❌ No hay servicios disponibles ahora mismo.")
             return
 
         texto = "💅 *Nuestros servicios*\n\n"
+
         for s in servicios:
             texto += (
                 f"🔹 *{s.nombre}*\n"
                 f"   📄 {s.descripcion}\n"
                 f"   ⏱ {s.duracion_minutos} min · 💶 {s.precio}€\n\n"
             )
+
         texto += "👉 Reserva con /book"
+
         await update.message.reply_text(texto, parse_mode="Markdown")
 
-    # ------------------------------------------------------------------ #
-    # /book — step 1: choose service
-    # ------------------------------------------------------------------ #
+    # Start the booking flow and ask the user to choose a service
     @_require_registered
     async def book(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.user_data["flow"] = "booking"
         context.user_data["booking"] = {"step": "service"}
 
         servicios = ServicioDAO.obtener_servicios()
+
         if not servicios:
             await update.effective_message.reply_text("❌ No hay servicios disponibles ahora mismo.")
             return
 
         keyboard = [
-            [InlineKeyboardButton(
-                f"{s.nombre} — {s.precio}€",
-                callback_data=f"sv:{s.id_servicio}",
-            )]
+            [
+                InlineKeyboardButton(
+                    f"{s.nombre} — {s.precio}€",
+                    callback_data=f"sv:{s.id_servicio}",
+                )
+            ]
             for s in servicios
         ]
+
         keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
 
         await update.effective_message.reply_text(
@@ -84,14 +103,15 @@ class BookingController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Callback: service selected → step 2: choose slot
-    # ------------------------------------------------------------------ #
-    async def seleccionar_servicio(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Save the selected service and show available slots
+    async def seleccionar_servicio(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         query = update.callback_query
         id_servicio = int(query.data.split(":")[1])
 
         servicio = ServicioDAO.obtener_por_id(id_servicio)
+
         if not servicio:
             await query.message.reply_text("❌ Servicio no encontrado.")
             return
@@ -108,25 +128,32 @@ class BookingController:
         )
 
         slots = DisponibilidadDAO.obtener_slots_disponibles(id_servicio)
+
         if not slots:
             context.user_data.pop("flow", None)
             context.user_data.pop("booking", None)
+
             await query.message.reply_text(
                 "😔 No hay horarios disponibles para este servicio en los próximos 14 días.\n"
                 "Llámanos al 976 123 456 para encontrar una fecha."
             )
             return
 
-        # Show up to 12 slots
+        # Show the first available slots
         mostrar = slots[:12]
         keyboard = []
+
         for sl in mostrar:
             label = f"👤 {sl['empleado_nombre']}  📅 {_fmt_fecha(sl['fecha'])}  🕐 {sl['hora']}"
             cb = f"sl:{sl['id_empleado']}:{sl['fecha']}:{sl['hora']}"
             keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
 
         extra = len(slots) - len(mostrar)
-        nota = f"\n_… y {extra} más. Llámanos si no encuentras tu horario ideal._" if extra > 0 else ""
+        nota = (
+            f"\n_… y {extra} más. Llámanos si no encuentras tu horario ideal._"
+            if extra > 0
+            else ""
+        )
 
         keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
 
@@ -136,10 +163,10 @@ class BookingController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Callback: slot selected → step 3: confirm
-    # ------------------------------------------------------------------ #
-    async def seleccionar_slot(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Save the selected slot and ask the user to confirm the booking
+    async def seleccionar_slot(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         query = update.callback_query
         _, id_empleado_str, fecha, hora = query.data.split(":", 3)
         id_empleado = int(id_empleado_str)
@@ -170,15 +197,16 @@ class BookingController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Callback: confirm booking
-    # ------------------------------------------------------------------ #
-    async def confirmar_booking(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Confirm the booking and create the appointment
+    async def confirmar_booking(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         query = update.callback_query
         telegram_id = update.effective_user.id
         booking = context.user_data.get("booking", {})
 
         id_usuario = UsuarioDAO.obtener_id_usuario(telegram_id)
+
         if not id_usuario:
             await query.message.reply_text("❌ Error: usuario no encontrado.")
             return
@@ -188,10 +216,11 @@ class BookingController:
         fecha = booking.get("fecha")
         hora = booking.get("hora")
 
-        # Re-check availability to prevent race conditions
+        # Re-check availability before saving the appointment
         if CitaDAO.hay_conflicto(id_empleado, fecha, hora):
             context.user_data.pop("flow", None)
             context.user_data.pop("booking", None)
+
             await query.message.reply_text(
                 "⚠️ Lo sentimos, ese horario acaba de ser reservado por otra persona.\n"
                 "Usa /book para elegir otro horario."
@@ -218,21 +247,18 @@ class BookingController:
                 "Por favor llámanos al 976 123 456."
             )
 
-    # ------------------------------------------------------------------ #
-    # Callback: cancel booking flow
-    # ------------------------------------------------------------------ #
+    # Cancel the current booking flow
     async def cancelar_booking_flow(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         context.user_data.pop("flow", None)
         context.user_data.pop("booking", None)
+
         await update.callback_query.message.reply_text(
             "❌ Reserva cancelada. Usa /book cuando quieras intentarlo de nuevo."
         )
 
-    # ------------------------------------------------------------------ #
-    # /mis_citas
-    # ------------------------------------------------------------------ #
+    # Show the user's future appointments
     @_require_registered
     async def mis_citas(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
@@ -247,6 +273,7 @@ class BookingController:
 
         numeros = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
         texto = "📋 *Tus próximas citas:*\n\n"
+
         for i, c in enumerate(citas):
             icono = numeros[i] if i < len(numeros) else "🔹"
             texto += (
@@ -256,12 +283,12 @@ class BookingController:
                 f"   🕐 {c.hora} h\n"
                 f"   Estado: ✅ Confirmada\n\n"
             )
+
         texto += "Para cancelar alguna, usa /cancel."
+
         await update.effective_message.reply_text(texto, parse_mode="Markdown")
 
-    # ------------------------------------------------------------------ #
-    # /cancel — step 1: list citas
-    # ------------------------------------------------------------------ #
+    # Start the cancellation flow and list future appointments
     @_require_registered
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         telegram_id = update.effective_user.id
@@ -269,21 +296,23 @@ class BookingController:
         citas = CitaDAO.obtener_citas_futuras(id_usuario)
 
         if not citas:
-            await update.message.reply_text(
-                "📋 No tienes citas próximas que cancelar."
-            )
+            await update.message.reply_text("📋 No tienes citas próximas que cancelar.")
             return
 
         keyboard = [
-            [InlineKeyboardButton(
-                f"❌ {c.nombre_servicio} · {_fmt_fecha(c.fecha)} {c.hora}",
-                callback_data=f"cc:{c.id_cita}",
-            )]
+            [
+                InlineKeyboardButton(
+                    f"❌ {c.nombre_servicio} · {_fmt_fecha(c.fecha)} {c.hora}",
+                    callback_data=f"cc:{c.id_cita}",
+                )
+            ]
             for c in citas
         ]
+
         keyboard.append([InlineKeyboardButton("↩️ Volver", callback_data="cb")])
 
         context.user_data["flow"] = "cancel"
+
         await update.message.reply_text(
             "🗑 *¿Cuál cita deseas cancelar?*\n\n"
             "Pulsa la cita que quieres anular:",
@@ -291,14 +320,13 @@ class BookingController:
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Callback: cita chosen → confirm cancellation
-    # ------------------------------------------------------------------ #
+    # Save the selected appointment and ask the user to confirm cancellation
     async def seleccionar_cancelacion(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         query = update.callback_query
         id_cita = int(query.data.split(":")[1])
+
         context.user_data["cancel_cita_id"] = id_cita
 
         keyboard = [
@@ -307,15 +335,14 @@ class BookingController:
                 InlineKeyboardButton("↩️ No, volver", callback_data="cb"),
             ]
         ]
+
         await query.message.reply_text(
             "⚠️ ¿Confirmas que quieres *cancelar* esta cita?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # ------------------------------------------------------------------ #
-    # Callback: confirm cancellation
-    # ------------------------------------------------------------------ #
+    # Confirm the cancellation and update the appointment
     async def confirmar_cancelacion(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -325,6 +352,7 @@ class BookingController:
         id_usuario = UsuarioDAO.obtener_id_usuario(telegram_id)
 
         ok = CitaDAO.cancelar_cita(id_cita, id_usuario)
+
         context.user_data.pop("flow", None)
         context.user_data.pop("cancel_cita_id", None)
 
