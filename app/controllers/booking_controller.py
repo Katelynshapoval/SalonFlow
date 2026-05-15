@@ -33,6 +33,15 @@ def _fmt_fecha(fecha_str: str) -> str:
     dia_semana = _DIAS_ES[d.weekday()]
     return f"{dia_semana} {d.day} {_MESES_ES[d.month]}"
 
+def _slots_por_fecha(slots):
+    fechas = {}
+
+    for sl in slots:
+        fecha = str(sl["fecha"])
+        fechas.setdefault(fecha, []).append(sl)
+
+    return fechas
+
 
 # Check that the user is registered before running protected commands
 def _require_registered(func):
@@ -104,8 +113,9 @@ class BookingController:
         )
 
     # Save the selected service and show available slots
+    # Save the selected service and ask the user to choose an available day
     async def seleccionar_servicio(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+            self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         query = update.callback_query
         id_servicio = int(query.data.split(":")[1])
@@ -115,17 +125,6 @@ class BookingController:
         if not servicio:
             await query.message.reply_text("❌ Servicio no encontrado.")
             return
-
-        context.user_data["booking"] = {
-            "step": "slot",
-            "id_servicio": id_servicio,
-            "nombre_servicio": servicio.nombre,
-        }
-
-        await query.message.reply_text(
-            f"✅ Has elegido: *{servicio.nombre}*\n\nBuscando horarios disponibles…",
-            parse_mode="Markdown",
-        )
 
         slots = DisponibilidadDAO.obtener_slots_disponibles(id_servicio)
 
@@ -139,26 +138,114 @@ class BookingController:
             )
             return
 
-        # Show the first available slots
-        mostrar = slots[:12]
-        keyboard = []
+        fechas_disponibles = sorted({str(sl["fecha"]) for sl in slots})
 
-        for sl in mostrar:
-            label = f"👤 {sl['empleado_nombre']}  📅 {_fmt_fecha(sl['fecha'])}  🕐 {sl['hora']}"
-            cb = f"sl:{sl['id_empleado']}:{sl['fecha']}:{sl['hora']}"
-            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+        context.user_data["booking"] = {
+            "step": "day",
+            "id_servicio": id_servicio,
+            "nombre_servicio": servicio.nombre,
+            "slots": slots,
+        }
 
-        extra = len(slots) - len(mostrar)
-        nota = (
-            f"\n_… y {extra} más. Llámanos si no encuentras tu horario ideal._"
-            if extra > 0
-            else ""
-        )
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"📅 {_fmt_fecha(fecha)}",
+                    callback_data=f"fd:{fecha}",
+                )
+            ]
+            for fecha in fechas_disponibles
+        ]
 
         keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
 
         await query.message.reply_text(
-            f"🗓 *Elige fecha y hora para {servicio.nombre}:*{nota}",
+            f"✅ Has elegido: *{servicio.nombre}*\n\n"
+            "Ahora elige el día de la cita:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Save the selected day and show available times for that day
+    async def seleccionar_fecha(
+            self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        fecha = query.data.split(":", 1)[1]
+
+        booking = context.user_data.get("booking", {})
+        slots = booking.get("slots", [])
+
+        slots_dia = [
+            sl for sl in slots
+            if str(sl["fecha"]) == fecha
+        ]
+
+        if not slots_dia:
+            await query.message.reply_text(
+                "😔 Ya no hay horarios disponibles para ese día.\n"
+                "Usa /book para elegir otra fecha."
+            )
+            return
+
+        booking.update(
+            step="slot",
+            fecha=fecha,
+        )
+        context.user_data["booking"] = booking
+
+        keyboard = []
+
+        for sl in slots_dia:
+            label = f"👤 {sl['empleado_nombre']}  🕐 {sl['hora']}"
+            cb = f"sl:{sl['id_empleado']}:{fecha}:{sl['hora']}"
+            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
+
+        keyboard.append([InlineKeyboardButton("↩️ Elegir otro día", callback_data="bd")])
+        keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
+
+        await query.message.reply_text(
+            f"🗓 *Horarios disponibles para {_fmt_fecha(fecha)}:*\n\n"
+            f"Servicio: *{booking.get('nombre_servicio', '—')}*",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Go back from time selection to day selection
+    async def volver_a_fechas(
+            self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+
+        booking = context.user_data.get("booking", {})
+        slots = booking.get("slots", [])
+
+        if not slots:
+            await query.message.reply_text(
+                "❌ No se encontraron horarios guardados. Usa /book para empezar de nuevo."
+            )
+            return
+
+        fechas_disponibles = sorted({str(sl["fecha"]) for sl in slots})
+
+        booking["step"] = "day"
+        booking.pop("fecha", None)
+        context.user_data["booking"] = booking
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"📅 {_fmt_fecha(fecha)}",
+                    callback_data=f"fd:{fecha}",
+                )
+            ]
+            for fecha in fechas_disponibles
+        ]
+
+        keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="cb")])
+
+        await query.message.reply_text(
+            "📅 Elige otro día disponible:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )

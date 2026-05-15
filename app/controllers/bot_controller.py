@@ -67,6 +67,18 @@ class BotController:
         elif data.startswith("sv:"):
             await self.booking_ctrl.seleccionar_servicio(update, context)
 
+        elif data.startswith("sv:"):
+            await self.booking_ctrl.seleccionar_servicio(update, context)
+
+        elif data.startswith("fd:"):
+            await self.booking_ctrl.seleccionar_fecha(update, context)
+
+        elif data == "bd":
+            await self.booking_ctrl.volver_a_fechas(update, context)
+
+        elif data.startswith("sl:"):
+            await self.booking_ctrl.seleccionar_slot(update, context)
+
         elif data.startswith("sl:"):
             await self.booking_ctrl.seleccionar_slot(update, context)
 
